@@ -1,0 +1,11 @@
+- name: Check security updates
+  hosts: all
+  tasks:
+    - name: List upgradable packages with security updates
+      shell: unattended-upgrade --dry-run -d | grep -i security
+      register: sec_updates
+      changed_when: false
+
+    - name: Show security update output
+      debug:
+        var: sec_updates.stdout_lines
