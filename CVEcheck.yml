@@ -1,14 +1,43 @@
-- name: Check security updates
+- name: Check for security updates across all systems
   hosts: all
-  gather_facts: false
+  gather_facts: true
+  become: true
+
   tasks:
-    - name: List upgradable packages with security updates
-      shell: unattended-upgrade --dry-run -d | grep -i security
+    - name: Check if system is Debian/Ubuntu
+      set_fact:
+        is_debian: "{{ ansible_facts['os_family'] == 'Debian' }}"
+
+    - name: Check if unattended-upgrade exists
+      stat:
+        path: /usr/bin/unattended-upgrade
+      register: unattended_upgrade_bin
+      when: is_debian
+
+    - name: Install unattended-upgrades if missing
+      apt:
+        name: unattended-upgrades
+        state: present
+      when:
+        - is_debian
+        - not unattended_upgrade_bin.stat.exists
+
+    - name: Run security updates dry-run
+      shell: unattended-upgrade --dry-run -d | grep -i security || true
       register: sec_updates
       changed_when: false
+      when:
+        - is_debian
+        - unattended_upgrade_bin.stat.exists or True  # After install
 
     - name: Show security update output
       debug:
-        var: sec_updates.stdout_lines
-- name: Check security updates
-  hosts: all
+        msg: |
+          Host: {{ inventory_hostname }}
+          Security Updates:
+          {% if sec_updates.stdout_lines %}
+          {{ sec_updates.stdout_lines | join('\n') }}
+          {% else %}
+          No security updates found or command failed.
+          {% endif %}
+      when: is_debian
